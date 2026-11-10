@@ -1,9 +1,27 @@
+# ── Rust / Tauri 构建产物 ──────────────────────────────
 /target/
 /gen/schemas/
 /binaries/
 
-# sidecar 运行时（npm 装配生成，由脚本重建，不进 git）
-/sidecar/node.exe
-/sidecar/node_modules/
-/sidecar/kugoumusicapi/node_modules/
-/sidecar/package*.json
+# ── 前端构建产物（Vite）────────────────────────────────
+# frontendDist 指向仓库根 ../dist；另留 frontend/dist 兜底
+/dist/
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+
+# ── node_modules（任意位置，含 vendor/）────────────────
+node_modules/
+
+# ── sidecar 运行时（由 scripts/build-sidecar.mjs 完整装配/重建，不入 git）─
+# 整个目录都是生成物：node.exe、node_modules、kugoumusicapi/、package*.json
+/sidecar/
+
+# ── 操作系统 / 编辑器杂项 ──────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+*.tmp
+.idea/
+*.swp
