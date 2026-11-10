@@ -1,0 +1,9 @@
+/target/
+/gen/schemas/
+/binaries/
+
+# sidecar 运行时（npm 装配生成，由脚本重建，不进 git）
+/sidecar/node.exe
+/sidecar/node_modules/
+/sidecar/kugoumusicapi/node_modules/
+/sidecar/package*.json

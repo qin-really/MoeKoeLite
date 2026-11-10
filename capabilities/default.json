@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "主窗口能力集：核心窗口操作 + 深链校验 + 拖拽标题栏 + 外部打开",
+  "windows": ["main", "lyrics", "mv"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:event:default",
+    "core:image:default",
+    "core:webview:default",
+    "opener:default",
+    "deep-link:allow-get-current",
+    "deep-link:allow-is-registered",
+    "deep-link:allow-register",
+    "deep-link:allow-unregister",
+    "shell:allow-open",
+    "shell:allow-spawn",
+    "shell:allow-kill",
+    "shell:allow-stdin-write"
+  ]
+}

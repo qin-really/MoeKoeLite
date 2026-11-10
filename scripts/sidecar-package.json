@@ -1,0 +1,6 @@
+{
+  "name": "moekoe-sidecar-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "kugoumusicapi sidecar 运行时（构建产物，勿手改）"
+}

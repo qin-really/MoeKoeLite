@@ -1,0 +1,109 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MoeKoe Music",
+  "version": "1.7.2",
+  "identifier": "cn.MoeKoe.Music",
+  "build": {
+    "beforeDevCommand": "pnpm serve",
+    "devUrl": "http://localhost:8080",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "MoeKoe Music",
+        "width": 1200,
+        "height": 938,
+        "minWidth": 890,
+        "minHeight": 750,
+        "center": true,
+        "decorations": false,
+        "resizable": true,
+        "maximizable": true,
+        "minimizable": true,
+        "transparent": false,
+        "skipTaskbar": false,
+        "shadow": true,
+        "visible": true,
+        "backgroundColor": "#FFFFFF"
+      },
+      {
+        "label": "lyrics",
+        "title": "歌词",
+        "width": 900,
+        "height": 128,
+        "minWidth": 800,
+        "minHeight": 96,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visible": false,
+        "backgroundColor": "#00000000"
+      },
+      {
+        "label": "mv",
+        "title": "MV 播放",
+        "width": 1280,
+        "height": 720,
+        "maxWidth": 1920,
+        "maxHeight": 1080,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": false,
+        "backgroundColor": "#000000"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "category": "Music",
+    "shortDescription": "酷狗第三方桌面播放器",
+    "longDescription": "MoeKoe Music — 高颜值酷狗第三方播放器（Tauri 版）",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [],
+    "resources": {
+      "../public/assets": "assets",
+      "sidecar": "sidecar"
+    },
+    "linux": {
+      "appimage": { "bundleMediaFramework": false }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "displayLanguageSelector": false,
+        "languages": ["SimpChinese"],
+        "startMenuFolder": "MoeKoe Music",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["moekoe"]
+      }
+    },
+    "shell": {
+      "open": true
+    }
+  }
+}

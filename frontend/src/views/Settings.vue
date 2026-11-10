@@ -1,0 +1,1547 @@
+<template>
+    <div class="settings-page">
+        <div class="settings-sidebar">
+            <div v-for="(section, sectionIndex) in settingSections" :key="sectionIndex" class="sidebar-item"
+                :class="{ active: activeTab === sectionIndex }" @click="activeTab = sectionIndex">
+                <i :class="section.icon"></i>
+                <span>{{ section.title }}</span>
+            </div>
+        </div>
+
+        <div class="settings-content">
+            <div v-for="(section, sectionIndex) in settingSections" :key="sectionIndex" class="setting-section"
+                v-show="activeTab === sectionIndex">
+                <h3>{{ section.title }}</h3>
+                <div class="settings-cards">
+                    <div v-for="(item, itemIndex) in getVisibleItems(section)" :key="itemIndex" class="setting-card"
+                        :class="{ 'setting-card--toggle': isToggleItem(item) }" @click.stop="handleCardClick(item)">
+                        <div class="setting-card-header">
+                            <div class="setting-card-title">
+                                <i :class="item.itemIcon || 'fas fa-sliders-h'"></i>
+                                <span>{{ item.label }}</span>
+                                <span v-if="item.showRefreshHint && showRefreshHint[item.key]" class="refresh-hint">
+                                    {{ item.refreshHintText }}
+                                </span>
+                            </div>
+                            <button v-if="item.helpLink" type="button" class="card-help-link"
+                                :title="$t('bang-zhu')" :aria-label="$t('bang-zhu')"
+                                @click.stop="openHelpLink(item.helpLink)">
+                                <i class="fas fa-question-circle"></i>
+                            </button>
+                        </div>
+                        <div class="setting-card-value">
+                            <template v-if="isToggleItem(item)">
+                                <span>{{ item.icon }}{{ selectedSettings[item.key]?.displayText }}</span>
+                                <button type="button" class="setting-switch" :class="{ active: isToggleEnabled(item) }"
+                                    :aria-checked="isToggleEnabled(item)" role="switch"
+                                    @click.stop="toggleSetting(item)">
+                                    <span class="setting-switch-thumb"></span>
+                                </button>
+                            </template>
+                            <template v-else>
+                                <span>{{ item.icon }}{{ item.customText || selectedSettings[item.key]?.displayText }}</span>
+                                <i class="fas fa-chevron-right"></i>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="reset-settings-container">
+                <button @click="openResetConfirmation" class="reset-settings-button">
+                    <i class="fas fa-sync-alt"></i>
+                    {{ $t('hui-fu-chu-chang-she-zhi') }}
+                </button>
+            </div>
+            <div class="version-info">
+                <p>© MoeKoe Music</p>
+                <span v-if="appVersion">V{{ appVersion }} - {{ platform }}</span>
+            </div>
+        </div>
+
+        <teleport to="body">
+        <div v-if="isSelectionOpen" class="modal" @click.self="closeSelection">
+            <div class="modal-content">
+                <button class="ghost-button close-button" :title="t('guan-bi-an-niu')" :aria-label="t('guan-bi-an-niu')" @click="closeSelection">
+                    <i class="fas fa-x"></i>
+                </button>
+                <a v-if="currentHelpLink" class="help-link" @click="openHelpLink()" :title="$t('bang-zhu')"
+                    :aria-label="$t('bang-zhu')">
+                    <i class="fas fa-question-circle"></i>
+                </a>
+                <h3>{{ getSettingItem(selectionType)?.selectionTitle }}</h3>
+                <input v-if="isFontSelection()" class="font-search" placeholder="搜索字体..."
+                    v-model="fontSearch" />
+                <ul v-else-if="!isToggleItem(getSettingItem(selectionType)) && isPreventOpenSelectionItem(getSettingItem(selectionType))">
+                    <li v-for="option in getSettingItem(selectionType)?.options || []" :key="option.value"
+                        @click="selectOption(option)">
+                        {{ option.displayText }}
+                    </li>
+                </ul>
+
+                <ul v-if="selectionType === 'audioOutputDevice'">
+                    <li v-if="audioOutputDevicesLoading">正在获取设备列表...</li>
+                    <li v-else-if="audioOutputDeviceOptions.length === 0">未检测到音频输出设备</li>
+                    <li v-else v-for="option in audioOutputDeviceOptions" :key="option.value"
+                        @click="selectOption(option)">
+                        {{ option.displayText }}
+                    </li>
+                </ul>
+
+                <ul v-if="isFontSelection()" class="font-list">
+                    <li v-if="fontOptionsLoading">{{ $t('jia-zai-zhong') }}</li>
+                    <li v-else-if="fontOptions.length === 0">{{ $t('mo-ren-zi-ti') }}</li>
+                    <template v-else v-for="option in fontOptions" :key="option.value">
+                        <li v-if="!fontSearch || option.displayText.toLowerCase().includes(fontSearch.toLowerCase())"
+                            :style="{ fontFamily: option.value }"
+                            @click="selectFontOption(option)"
+                            v-html="fontSearch? option.displayText.replace(
+                                new RegExp(fontSearch, 'ig'),
+                                `<mark>${fontSearch}</mark>`
+                            ): option.displayText">
+                        </li>
+                    </template>
+                    
+                </ul>
+
+                <div v-if="selectionType === 'highDpi'" class="scale-slider-container">
+                    <div class="scale-slider-label">{{ $t('suo-fang-yin-zi') }}: {{ dpiScale }} <span
+                            class="scale-slider-hint">{{ $t('tiao-zheng-hou-xu-zhong-qi') }}</span></div>
+                    <div class="scale-slider-wrapper">
+                        <input type="range" min="0.5" max="2" step="0.1" v-model="dpiScale" class="scale-slider" />
+                        <div class="scale-marks">
+                            <span>0.5</span>
+                            <span>1.0</span>
+                            <span>1.5</span>
+                            <span>2.0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="selectionType === 'apiMode'"
+                    class="api-settings-container">
+                    <div class="api-setting-item">
+                        <label>{{ t('kai-qi') }}/{{ t('guan-bi') }}</label>
+                        <div class="switch-panel">
+                            <button v-for="option in getSettingItem(selectionType)?.options || []" :key="option.value"
+                                :class="{ active: selectedSettings[selectionType].value === option.value }"
+                                @click="selectOption(option)">
+                                {{ option.displayText }}
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="false" class="api-setting-item">
+                        <label>{{ $t('jian-ting-zhu-ji') }}</label>
+                        <input type="text" placeholder="127.0.0.1" class="api-input" v-model="apiModeForm.host" />
+                    </div>
+                    <div class="api-setting-item">
+                        <label>{{ $t('jian-ting-duan-kou') }}</label>
+                        <input type="number" placeholder="6520" min="1" max="65535" class="api-input" v-model="apiModeForm.port" />
+                    </div>
+                    <div class="api-setting-item">
+                        <label>{{ $t('websocket-jian-ting-lu-jing') }}</label>
+                        <input type="text" spellcheck="false" placeholder="/moekoe" class="api-input" v-model="apiModeForm.wsPath" />
+                    </div>
+                    <div class="api-setting-item row">
+                        <label>{{ $t('allow-lan-request') }}</label>
+                        <button type="button" class="setting-switch" :class="{ active: apiModeForm.host === '0.0.0.0' }"
+                                :aria-checked="apiModeForm.host === '0.0.0.0'" role="switch"
+                                @click.stop="toggleLanApiMode">
+                             <span class="setting-switch-thumb"></span>
+                        </button>
+                    </div>
+                    <div class="api-setting-item">
+                        <label>
+                            {{ $t('websocket-api-url-preview') }}
+                            <span class="btns">
+                                <a :title="t('fu-zhi')" :aria-label="t('fu-zhi')" class="copy-button" @click="copy(apiModeUrlPreview.ws, $event.target)">
+                                    <i class="fas fa-clipboard"></i>
+                                </a>
+                                <a class="help-link normal" @click="openHelpLink('https://music.moekoe.cn/websocket-api.html')" :title="$t('bang-zhu')"
+                                    :aria-label="$t('bang-zhu')">
+                                    <i class="fas fa-question-circle"></i>
+                                </a>
+                            </span>
+                        </label>
+                        <input type="url" spellcheck="false" readonly class="api-input" :value="apiModeUrlPreview.ws" />
+                    </div>
+                    <div class="api-setting-item">
+                        <label>
+                            {{ $t('web-api-url-preview') }}
+                            <span class="btns">
+                                <a :title="t('fu-zhi')" :aria-label="t('fu-zhi')" class="copy-button" @click="copy(apiModeUrlPreview.http, $event.target)">
+                                    <i class="fas fa-clipboard"></i>
+                                </a>
+                                <a class="help-link normal" @click="openHelpLink('https://music.moekoe.cn/api-docs.html')" :title="$t('bang-zhu')"
+                                    :aria-label="$t('bang-zhu')">
+                                    <i class="fas fa-question-circle"></i>
+                                </a>
+                            </span>
+                        </label>
+                        <input type="url" spellcheck="false" readonly class="api-input" :value="apiModeUrlPreview.http" />
+                    </div>
+                    <div v-if="false" class="api-hint">
+                        {{ $t('zhong-qi-hou-sheng-xiao') }}
+                    </div>
+                    <div class="proxy-actions">
+                        <button class="primary" @click="saveApiModeUrl">
+                            {{ $t('bao-cun-she-zhi-an-niu') }}
+                        </button>
+                    </div>
+                </div>
+                <div v-if="selectionType === 'apiBaseUrlMode' && selectedSettings.apiBaseUrlMode.value === 'custom'"
+                    class="api-settings-container">
+                    <div class="api-setting-item">
+                        <input type="text" v-model="apiBaseUrlForm.url" class="api-input"
+                            :placeholder="`RPC地址（留空使用默认：${defaultApiBaseUrl}）`" />
+                    </div>
+                    <div class="proxy-actions">
+                        <button @click="testApiBaseUrl" :disabled="apiBaseUrlForm.testing" class="test-button">
+                            {{ apiBaseUrlForm.testing ? $t('zheng-zai-ce-shi') : $t('ce-shi-lian-jie') }}
+                        </button>
+                        <button class="primary" @click="saveApiBaseUrl">
+                            {{ $t('bao-cun-she-zhi-an-niu') }}
+                        </button>
+                    </div>
+                    <div v-if="apiBaseUrlForm.testResult" :class="['proxy-test-result', apiBaseUrlForm.testStatus]">
+                        {{ apiBaseUrlForm.testResult }}
+                    </div>
+                </div>
+                <div v-if="selectionType === 'proxy' && selectedSettings.proxy.value === 'on'"
+                    class="proxy-settings-container">
+                    <div class="api-setting-item">
+                        <input type="text" v-model="proxyForm.url" class="api-input"
+                            :placeholder="$t('dai-li-placeholder')" />
+                    </div>
+                    <div class="proxy-actions">
+                        <button @click="testProxyConnection" :disabled="proxyForm.testing" class="test-button">
+                            {{ proxyForm.testing ? $t('zheng-zai-ce-shi') : $t('ce-shi-lian-jie') }}
+                        </button>
+                        <button class="primary" @click="saveProxy">
+                            {{ $t('bao-cun-she-zhi-an-niu') }}
+                        </button>
+                    </div>
+                    <div v-if="proxyForm.testResult" :class="['proxy-test-result', proxyForm.testStatus]">
+                        {{ proxyForm.testResult }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        </teleport>
+
+            </div>
+</template>
+
+<script setup>
+import { ref, onMounted, getCurrentInstance, reactive, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { MoeAuthStore } from '../stores/store';
+import { applyCustomFont, requestMicrophonePermission } from '../utils/utils';
+import { DEFAULT_API_BASE_URL, validateApiBaseUrl, testApiBaseUrl as testApiBaseUrlRequest } from '@/utils/apiBaseUrl';
+import { useSettingsConfig } from '@/config/settings';
+import { ONBOARDING_GUIDE_EVENT } from '@/config/onboardingGuide';
+import defaultSettings from '@/../electron/defaultSettings.json';
+
+const MoeAuth = MoeAuthStore();
+const { t } = useI18n();
+const { proxy } = getCurrentInstance();
+const appVersion = ref('');
+const platform = ref('');
+const activeTab = ref(0);
+const defaultApiBaseUrl = DEFAULT_API_BASE_URL;
+
+/** @param {HTMLButtonElement | null | undefined} target */
+const copy = async (content, target = null) => {
+    if(target) target.disabled = true;
+    try {
+        await navigator.clipboard.writeText(content);
+        $message.success('复制成功');
+    } catch(e) {
+        $message.error('复制失败：', e.message);
+    }
+    if(target) setTimeout(() => {
+        target.disabled = false;
+    }, 1500);
+}
+
+const { settingSections } = useSettingsConfig(t, {
+    installPWA: () => installPWA(),
+    openOnboardingGuide: () => openOnboardingGuide()
+});
+
+const createSelectedSettings = (sections) => {
+    const selectedSettings = {};
+
+    sections.forEach(section => {
+        section.items.forEach(item => {
+            if (!Object.prototype.hasOwnProperty.call(item, 'defaultValue')) return;
+            const option = item.options?.find(option => option.value === item.defaultValue);
+            selectedSettings[item.key] = {
+                displayText: item.defaultDisplayText ?? option?.displayText ?? '',
+                value: item.defaultValue
+            };
+        });
+    });
+
+    return selectedSettings;
+};
+
+const selectedSettings = ref(createSelectedSettings(settingSections.value));
+
+const isSelectionOpen = ref(false);
+const currentHelpLink = ref('');
+const selectionType = ref('');
+const fontOptions = ref([]);
+const fontOptionsLoading = ref(false);
+const fontSearch = ref('');
+
+const showRefreshHint = ref({});
+
+const audioOutputDeviceOptions = ref([]);
+const audioOutputDevicesLoading = ref(false);
+
+const isFontSelection = (type = selectionType.value) => ['font', 'desktopLyricsFont'].includes(type);
+
+const updateAudioOutputDeviceDisplayText = async (deviceId) => {
+    if (!deviceId || deviceId === 'default') {
+        selectedSettings.value.audioOutputDevice = { displayText: '默认', value: 'default' };
+        return;
+    }
+
+    let displayText = `已选择设备 (${deviceId.slice(0, 8)}...)`;
+    try {
+        if (navigator?.mediaDevices?.enumerateDevices) {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const matched = devices.find(d => d.kind === 'audiooutput' && d.deviceId === deviceId);
+            if (matched?.label) displayText = matched.label;
+        }
+    } catch {
+        // 忽略枚举失败
+    }
+
+    selectedSettings.value.audioOutputDevice = { displayText, value: deviceId };
+};
+
+const loadAudioOutputDevices = async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+        audioOutputDeviceOptions.value = [];
+        return;
+    }
+
+    audioOutputDevicesLoading.value = true;
+
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const outputs = devices.filter(d => d.kind === 'audiooutput');
+
+        const options = [{ displayText: '默认', value: 'default' }];
+        let unnamedIndex = 1;
+
+        for (const output of outputs) {
+            if (!output.deviceId) continue;
+            const displayText = output.label || `输出设备 ${unnamedIndex++}`;
+            options.push({ displayText, value: output.deviceId });
+        }
+
+        const seen = new Set();
+        audioOutputDeviceOptions.value = options.filter(opt => {
+            if (seen.has(opt.value)) return false;
+            seen.add(opt.value);
+            return true;
+        });
+    } catch {
+        audioOutputDeviceOptions.value = [{ displayText: '默认', value: 'default' }];
+    } finally {
+        audioOutputDevicesLoading.value = false;
+    }
+};
+
+const loadLocalFonts = async () => {
+    fontOptionsLoading.value = true;
+
+    try {
+        if (!window.queryLocalFonts) {
+            fontOptions.value = [];
+            return;
+        }
+
+        const fonts = await window.queryLocalFonts();
+        const familyMap = new Map();
+        for (const font of fonts) {
+            const family = font.family;
+            const name = font.fullName;
+            if (!family || !name) continue;
+
+            if (!familyMap.has(family) || name.length < familyMap.get(family).name.length) {
+                familyMap.set(family, {
+                    // 如果 fullName 太长了那就说明是变体名，直接用字族名代替
+                    name: name.length > family.length? family: name,
+                    family
+                });
+            }
+        }
+
+        const families = [...familyMap.values()].sort((a, b) =>
+            a.family.localeCompare(b.family)
+        );
+        fontOptions.value = [
+            { displayText: t('mo-ren-zi-ti'), value: '' },
+            ...families.map(f => ({
+                displayText: f.name === f.family? f.family: `${f.name} (${f.family})`,
+                value: f.family
+            }))
+        ];
+    } catch {
+        fontOptions.value = [];
+    } finally {
+        fontOptionsLoading.value = false;
+    }
+};
+
+const openSelection = (type, helpLink) => {
+    isSelectionOpen.value = true;
+    selectionType.value = type;
+    currentHelpLink.value = helpLink || getSettingItem(type)?.helpLink || '';
+
+    if (type === 'highDpi') {
+        dpiScale.value = parseFloat(selectedSettings.value.dpiScale?.value || '1.0');
+    }
+
+    if (isFontSelection(type)) void loadLocalFonts();
+
+    if (type === 'proxy') {
+        proxyForm.url = selectedSettings.value.proxyUrl?.value || '';
+    }
+
+    if (type === 'apiBaseUrlMode') {
+        apiBaseUrlForm.url = selectedSettings.value.apiBaseUrl?.value || '';
+        apiBaseUrlForm.testResult = '';
+        apiBaseUrlForm.testStatus = '';
+    }
+
+    if (type === 'audioOutputDevice') {
+        void loadAudioOutputDevices();
+    }
+};
+
+const openHelpLink = (url) => {
+    url = url || currentHelpLink.value;
+    if (!url) return;
+    if (isElectron()) {
+        window.electron.ipcRenderer.send('open-url', url);
+    } else {
+        window.open(url, '_blank');
+    }
+};
+
+const getSettingItem = (key) => {
+    for (const section of settingSections.value) {
+        const item = section.items.find(item => item.key === key);
+        if (item) return item;
+    }
+    return null;
+};
+
+const getVisibleItems = (section) => section.items.filter(item => !item.hidden && !getUnavailableSettingText(item));
+
+const isToggleItem = (item) => {
+    if (!item?.options || item.options.length !== 2) return false;
+    const values = item.options.map(option => option.value);
+    return values.includes('on') && values.includes('off');
+};
+
+const isPreventOpenSelectionItem = (item) =>
+    (typeof item.noSelection === 'undefined' || item.noSelection === true);
+
+const isDisabledItem = (item) => {
+    const value = selectedSettings.value?.[item.key].value;
+    return value? value === 'off': false;
+}
+
+const isToggleEnabled = (item) => selectedSettings.value[item.key]?.value === 'on';
+
+const handleCardClick = (item) => {
+    if (item.action) {
+        item.action(item.helpLink);
+        return;
+    }
+
+    if (isToggleItem(item) && isPreventOpenSelectionItem(item)) {
+        return;
+    } else if(isToggleItem(item) && isDisabledItem(item)) {
+        return;
+    }
+
+    openSelection(item.key);
+};
+
+const markRefreshHint = (key) => {
+    if (getSettingItem(key)?.showRefreshHint) {
+        showRefreshHint.value[key] = true;
+    }
+};
+
+const shouldKeepSelectionOpen = (key) => {
+    return settingSections.value.some(section => section.items.some(item =>
+        item.keepOpen && item.key === key
+    ));
+};
+
+const getUnavailableSettingText = (item) => {
+    const available = item?.available?.toLowerCase();
+    if (!available) return '';
+    const currentPlatform = isElectron() ? window.electron.platform : 'web';
+    if (available === currentPlatform || available === 'client' && isElectron()) return '';
+    return item.unavailableText || t('fei-ke-hu-duan-huan-jing-wu-fa-qi-yong');
+};
+
+const selectActions = {
+    applyThemeColor: (option) => proxy.$applyColorTheme(option.value),
+    applyTheme: (option) => proxy.$setTheme(option.value),
+    applyLanguage: (option) => {
+        proxy.$i18n.locale = option.value;
+        document.documentElement.lang = option.value;
+    },
+    checkQualityAuth: () => {
+        if (!MoeAuth.isAuthenticated) {
+            window.$modal.alert(t('gao-pin-zhi-yin-le-xu-yao-deng-lu-hou-cai-neng-bo-fango'));
+        }
+    },
+    saveDpiScale: () => {
+        selectedSettings.value.dpiScale = {
+            value: dpiScale.value.toString(),
+            displayText: dpiScale.value.toString()
+        };
+    },
+    toggleDesktopLyrics: (option) => {
+        const action = option.value === 'on' ? 'display-lyrics' : 'close-lyrics';
+        window.electron.ipcRenderer.send('desktop-lyrics-action', action);
+    },
+    dispatchLoudnessNormalization: (option) => {
+        window.dispatchEvent(new CustomEvent('loudness-normalization-change', {
+            detail: { enabled: option.value === 'on' }
+        }));
+    },
+    updateAudioOutputWatch: async (option) => {
+        if (option.value === 'on') {
+            const granted = await requestMicrophonePermission();
+            if (!granted) {
+                selectedSettings.value.pauseOnAudioOutputChange = {
+                    displayText: t('guan-bi'),
+                    value: 'off'
+                };
+                window.dispatchEvent(new CustomEvent('audio-output-device-watch-change', {
+                    detail: { enabled: false }
+                }));
+                window.$modal.alert('音频权限申请失败，无法启用该功能');
+                return;
+            }
+        }
+
+        window.dispatchEvent(new CustomEvent('audio-output-device-watch-change', {
+            detail: { enabled: option.value === 'on' }
+        }));
+    },
+    resetApiBaseUrl: (option) => {
+        if (option.value === 'default') {
+            selectedSettings.value.apiBaseUrl = { displayText: '', value: '' };
+        }
+    },
+    dispatchAudioOutputDevice: (option) => {
+        window.dispatchEvent(new CustomEvent('audio-output-device-change', {
+            detail: { deviceId: option.value }
+        }));
+    },
+    handleLogAction: async (option) => {
+        let result;
+        switch (option.value) {
+            case 'open-path':
+                result = await window.electronAPI.openLogPath();
+                break;
+            case 'export-log':
+                result = await window.electronAPI.exportLog();
+                break;
+            default:
+                break;
+        }
+        if (result?.error) {
+            console.error(`日志操作 ${option.value} 失败:`, result.error);
+            window.$modal.alert(`日志操作失败，详细信息请查看控制台`);
+        }
+        if (option.value === 'export-log' && result?.filePath) {
+            await window.$modal.alert(`日志(已脱敏)已导出到:\n${result.filePath}`);
+        }
+    }
+};
+
+const runSelectAction = async (item, option) => {
+    if (!item?.selectAction) return;
+    await selectActions[item.selectAction]?.(option);
+};
+
+const toggleSetting = async (item) => {
+    const currentValue = selectedSettings.value[item.key]?.value;
+    const nextOption = item.options.find(option => option.value === (currentValue === 'on' ? 'off' : 'on'));
+    if (!nextOption) return;
+    if(!isPreventOpenSelectionItem(item) && nextOption.value === 'on') openSelection(item.key, item.helpLink);
+
+    selectedSettings.value[item.key] = { ...nextOption };
+    await runSelectAction(item, nextOption);
+    saveSettings();
+    markRefreshHint(item.key);
+};
+
+const selectOption = async (option) => {
+    const settingItem = getSettingItem(selectionType.value);
+    const unavailableText = getUnavailableSettingText(settingItem);
+    if (unavailableText) {
+        window.$modal.alert(unavailableText);
+        return;
+    }
+    selectedSettings.value[selectionType.value] = option;
+    await runSelectAction(settingItem, option);
+    saveSettings();
+    if (!shouldKeepSelectionOpen(selectionType.value)) closeSelection();
+    markRefreshHint(selectionType.value);
+};
+
+const selectFontOption = (option) => {
+    const key = selectionType.value;
+    selectedSettings.value[key] = {
+        displayText: option.displayText,
+        value: option.value
+    };
+    if (key === 'font') applyCustomFont(option.value);
+    saveSettings();
+    closeSelection();
+    markRefreshHint(key);
+};
+
+const isElectron = () => {
+    return typeof window !== 'undefined' && typeof window.electron !== 'undefined';
+};
+const saveSettings = (additional = {}) => {
+    const settingsToSave = Object.assign({}, Object.fromEntries(
+        Object.entries(selectedSettings.value).map(([key, setting]) => [key, setting.value])
+    ), additional);
+    localStorage.setItem('settings', JSON.stringify(settingsToSave));
+    window.dispatchEvent(new CustomEvent('settings-change', {
+        detail: { settings: settingsToSave }
+    }));
+    isElectron() && window.electron.ipcRenderer.send('save-settings', JSON.parse(JSON.stringify(settingsToSave)));
+};
+
+const closeSelection = () => {
+    isSelectionOpen.value = false;
+};
+
+onMounted(() => {
+    /** @type {typeof defaultSettings} */
+    const savedSettings = JSON.parse(localStorage.getItem('settings') || 'null') || defaultSettings;
+
+    // 兼容旧版 apiMode='auto'（扩展系统移除后 auto 视同开启）
+    if (savedSettings?.apiMode === 'auto') savedSettings.apiMode = 'on';
+
+    if (savedSettings) {
+        if (savedSettings.apiBaseUrlMode === undefined) {
+            const legacyUrl = savedSettings.apiBaseUrl || '';
+            savedSettings.apiBaseUrlMode = legacyUrl ? 'custom' : 'default';
+        }
+        for (const key in savedSettings) {
+            if (key === 'shortcuts') continue;
+            if (key === 'audioOutputDevice') continue;
+            const settingItem = getSettingItem(key);
+            if (key === 'quality') {
+                const option = settingItem.options.find(option => option.value === savedSettings[key]) || settingItem.options[0];
+                selectedSettings.value[key] = { ...option };
+                continue;
+            }
+            if(key === 'apiModeConfig') {
+                apiModeForm.host = savedSettings[key].host;
+                apiModeForm.port = savedSettings[key].port;
+                apiModeForm.wsPath = savedSettings[key].wsPath;
+            }
+            if (key === 'apiBaseUrlMode') {
+                const value = savedSettings[key];
+                selectedSettings.value[key] = {
+                    displayText: value === 'custom' ? '自定义' : '默认',
+                    value: value
+                };
+                continue;
+            }
+            if (key === 'apiBaseUrl') {
+                const value = savedSettings[key];
+                selectedSettings.value[key] = { displayText: '', value: value };
+                continue;
+            }
+            if (key === 'dpiScale') {
+                const value = savedSettings[key];
+                selectedSettings.value[key] = { displayText: value, value: value };
+                continue;
+            }
+            if (isFontSelection(key)) {
+                const value = savedSettings[key];
+                selectedSettings.value[key] = {
+                    displayText: value || t('mo-ren-zi-ti'),
+                    value: value
+                };
+                continue;
+            }
+            if (key === 'proxyUrl') {
+                const value = savedSettings[key];
+                selectedSettings.value[key] = {
+                    displayText: value,
+                    value: value
+                };
+                continue;
+            }
+            if (settingItem?.options) {
+                // Always get displayText from current translation, not from localStorage
+                const option = settingItem.options.find(
+                    (opt) => opt.value === savedSettings[key]
+                );
+                const displayText = option?.displayText || '🌏 ' + t('zi-dong');
+                selectedSettings.value[key] = { displayText, value: savedSettings[key] };
+            }
+        }
+    }
+    if (isElectron()) {
+        appVersion.value = localStorage.getItem('version');
+        platform.value = window.electron.platform;
+    } else {
+        appVersion.value = __VERSION__ || '';
+        platform.value = 'Web';
+    }
+
+    if (savedSettings?.audioOutputDevice !== undefined) {
+        void updateAudioOutputDeviceDisplayText(savedSettings.audioOutputDevice);
+    }
+});
+
+const proxyForm = reactive({ url: '', testing: false, testResult: '', testStatus: '' });
+const apiModeForm = reactive({ host: '127.0.0.1', port: 6520, wsPath: '/moekoe' });
+const apiModeUrlPreview = reactive({
+    http: computed(() => `http://127.0.0.1:${apiModeForm.port}`),
+    ws: computed(() => `ws://127.0.0.1:${apiModeForm.port}${apiModeForm.wsPath}`)
+});
+const apiBaseUrlForm = reactive({ url: '', testing: false, testResult: '', testStatus: '' });
+
+const toggleLanApiMode = () => {
+    const hosts = {
+        allow: '0.0.0.0',
+        deny: '127.0.0.1'
+    };
+    if(apiModeForm.host === hosts.allow) apiModeForm.host = hosts.deny;
+    else apiModeForm.host = hosts.allow;
+}
+
+const validateApiModeForm = () => {
+    const result = {
+        error: false,
+        msg: ''
+    }
+    if(apiModeForm.port <= 0 || apiModeForm.port >= 65535)
+        result.error = true, result.msg = '非法的端口 (仅限 1 ~ 65535)';
+    return result;
+}
+
+const saveApiModeUrl = () => {
+    if(!apiModeForm.port || !apiModeForm.wsPath) return;
+
+    const validation = validateApiModeForm();
+    if(validation.error) {
+        $modal.error(validation.msg);
+        return;
+    }
+
+    saveSettings({
+        apiModeConfig: apiModeForm
+    });
+    markRefreshHint('apiMode');
+    closeSelection();
+}
+
+const testApiBaseUrl = async () => {
+    const validation = validateApiBaseUrl(apiBaseUrlForm.url);
+    if (!validation.ok) {
+        apiBaseUrlForm.testResult = validation.error;
+        apiBaseUrlForm.testStatus = 'error';
+        return;
+    }
+
+    const candidate = validation.value || defaultApiBaseUrl;
+    apiBaseUrlForm.testing = true;
+    apiBaseUrlForm.testResult = t('zheng-zai-ce-shi');
+    apiBaseUrlForm.testStatus = 'testing';
+
+    const result = await testApiBaseUrlRequest(candidate, { path: '/register/dev' });
+    apiBaseUrlForm.testing = false;
+
+    if (result.ok) {
+        apiBaseUrlForm.testResult = '连接成功';
+        apiBaseUrlForm.testStatus = 'success';
+    } else if (result.error === 'timeout') {
+        apiBaseUrlForm.testResult = t('lian-jie-chao-shi');
+        apiBaseUrlForm.testStatus = 'error';
+    } else if (result.error === 'no_dfid') {
+        apiBaseUrlForm.testResult = 'RPC端点协议不符合';
+        apiBaseUrlForm.testStatus = 'error';
+    } else if (typeof result.status === 'number') {
+        apiBaseUrlForm.testResult = `连接失败：${result.status} ${result.statusText || ''}`.trim();
+        apiBaseUrlForm.testStatus = 'error';
+    } else {
+        apiBaseUrlForm.testResult = `连接错误：${result.error || ''}`.trim();
+        apiBaseUrlForm.testStatus = 'error';
+    }
+};
+
+const saveApiBaseUrl = () => {
+    const validation = validateApiBaseUrl(apiBaseUrlForm.url);
+    if (!validation.ok) {
+        window.$modal.alert(validation.error);
+        return;
+    }
+
+    const value = validation.value;
+    if (!value) {
+        selectedSettings.value.apiBaseUrlMode = { displayText: '默认', value: 'default' };
+        selectedSettings.value.apiBaseUrl = { displayText: '', value: '' };
+    } else {
+        selectedSettings.value.apiBaseUrlMode = { displayText: '自定义', value: 'custom' };
+        selectedSettings.value.apiBaseUrl = { displayText: '', value: value };
+    }
+    saveSettings();
+    markRefreshHint('apiBaseUrlMode');
+    closeSelection();
+};
+
+const testProxyConnection = async () => {
+    const proxyUrl = proxyForm.url.trim();
+    if (!proxyUrl) {
+        proxyForm.testResult = t('qing-shu-ru-dai-li-di-zhi');
+        proxyForm.testStatus = 'error';
+        return;
+    }
+
+    try {
+        const url = new URL(proxyUrl);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            proxyForm.testResult = t('zhi-chi-http-https-dai-li');
+            proxyForm.testStatus = 'error';
+            return;
+        }
+    } catch (e) {
+        proxyForm.testResult = t('qing-shu-ru-you-xiao-de-url');
+        proxyForm.testStatus = 'error';
+        return;
+    }
+
+    proxyForm.testing = true;
+    proxyForm.testResult = t('zheng-zai-ce-shi');
+    proxyForm.testStatus = 'testing';
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const proxyUrl = new URL(proxyForm.url.trim());
+        const fetchOptions = {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Proxy-Authorization': `Basic ${btoa(`${proxyUrl.username || ''}:${proxyUrl.password || ''}`)}`,
+            },
+            signal: controller.signal,
+            agent: {
+                protocol: proxyUrl.protocol,
+                host: proxyUrl.hostname,
+                port: proxyUrl.port,
+                auth: proxyUrl.username && proxyUrl.password ?
+                    `${proxyUrl.username}:${proxyUrl.password}` : undefined
+            }
+        };
+
+        const response = await fetch('https://api.ipify.org?format=json', fetchOptions);
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+            const data = await response.json();
+            proxyForm.testResult = t('dai-li-lian-jie-cheng-gong') + data.ip;
+            proxyForm.testStatus = 'success';
+        } else {
+            proxyForm.testResult = t('dai-li-lian-jie-shi-bai') + response.statusText;
+            proxyForm.testStatus = 'error';
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            proxyForm.testResult = t('lian-jie-chao-shi');
+        } else {
+            proxyForm.testResult = t('lian-jie-cuo-wu') + error.message;
+        }
+        proxyForm.testStatus = 'error';
+    } finally {
+        proxyForm.testing = false;
+    }
+};
+
+const saveProxy = () => {
+    const proxyUrl = proxyForm.url.trim();
+
+    try {
+        if (proxyUrl) {
+            const url = new URL(proxyUrl);
+            if (!['http:', 'https:'].includes(url.protocol)) {
+                window.$modal.alert(t('zhi-chi-http-https-dai-li'));
+                return;
+            }
+        }
+    } catch (e) {
+        window.$modal.alert(t('qing-shu-ru-you-xiao-de-url'));
+        return;
+    }
+
+    // 更新代理状态
+    selectedSettings.value.proxy = {
+        displayText: proxyUrl ? t('qi-yong') : t('jin-yong'),
+        value: proxyUrl ? 'on' : 'off'
+    };
+
+    // 更新代理地址
+    selectedSettings.value.proxyUrl = {
+        displayText: proxyUrl,
+        value: proxyUrl
+    };
+
+    saveSettings();
+    closeSelection();
+};
+
+const openOnboardingGuide = () => {
+    window.dispatchEvent(new CustomEvent(ONBOARDING_GUIDE_EVENT, {
+        detail: { reset: true }
+    }));
+};
+
+const dpiScale = ref(1.0);
+
+const openResetConfirmation = async () => {
+    const result = await window.$modal.confirm(t('ni-que-ren-hui-fu-chu-chang'));
+    if (result) {
+        localStorage.clear();
+        isElectron() && window.electron.ipcRenderer.send('clear-settings');
+        window.$modal.alert(t('hui-fu-chu-chang-she-zhi-cheng-gong'));
+    }
+};
+
+let deferredPrompt;
+if (!isElectron()) {
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+    });
+}
+
+const installPWA = async () => {
+    if (isElectron()) {
+        window.$modal.alert(t('qing-zai-web-huan-jing-xia-an-zhuang'));
+        return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === 'accepted') {
+        console.log('User accepted the PWA installation');
+        deferredPrompt = null;
+    } else {
+        console.log('User declined the PWA installation');
+    }
+};
+</script>
+
+<style lang="scss" scoped>
+$primary: var(--color-primary);
+$primary-light: var(--color-primary-light);
+$secondary: var(--primary-color);
+$text-muted: #666;
+$border-light: #eaeaea;
+$shadow-light: rgba(0, 0, 0, 0.15);
+$shadow-medium: rgba(0, 0, 0, 0.18);
+
+.settings-page {
+    display: flex;
+    height: var(--settings-page-height, calc(100vh - 160px));
+    min-height: 0;
+    overflow: hidden;
+    box-shadow: 0 0 30px $shadow-light;
+    border-radius: 8px;
+}
+
+:global(main.app-main-scroll:has(.settings-page)) {
+    --settings-page-height: calc(100vh - 160px);
+    padding-bottom: 80px;
+}
+
+:global(main.side-navigation-main-content:has(.settings-page)) {
+    --settings-page-height: calc(100vh - 132px);
+}
+
+.settings-sidebar {
+    width: 220px;
+    flex: 0 0 220px;
+    box-shadow: 0 0 10px $shadow-light;
+    padding: 20px 0;
+    overflow-y: auto;
+}
+
+.sidebar-item {
+    padding: 12px 20px;
+    margin: 4px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s ease;
+
+    i {
+        margin-right: 12px;
+        font-size: 16px;
+        width: 20px;
+        text-align: center;
+    }
+
+    &.active {
+        background-color: $primary-light;
+        color: $primary;
+        font-weight: 500;
+    }
+
+    &:hover:not(.active) {
+        background-color: var(--hover-color, #efefef);
+    }
+}
+
+.settings-content {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.setting-section {
+    animation: fadeIn 0.3s ease;
+
+    h3 {
+        font-size: 22px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid $border-light;
+    }
+}
+
+.settings-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+    gap: 16px;
+
+    .setting-card-header i {
+        color: var(--primary-color);
+    }
+}
+
+.setting-card {
+    min-width: 0;
+    box-sizing: border-box;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 16px $shadow-light;
+    transition: all 0.2s ease;
+    cursor: pointer;
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px $shadow-medium;
+    }
+
+    &-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+
+    &-value {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-width: 0;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 14px;
+        border: 1px solid $border-light;
+
+        i {
+            color: #999;
+            font-size: 12px;
+            flex: 0 0 auto;
+        }
+
+        span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    &--toggle {
+        .setting-card-value {
+            gap: 12px;
+            min-height: 38px;
+            padding: 4px 12px;
+            box-sizing: border-box;
+        }
+    }
+}
+
+.setting-card-title {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+
+    i {
+        color: $primary;
+        margin-right: 10px;
+        font-size: 16px;
+        flex: 0 0 auto;
+    }
+
+    > span {
+        min-width: 0;
+        word-break: break-word;
+    }
+}
+
+.card-help-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin-left: 12px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: $primary;
+    cursor: pointer;
+    flex: 0 0 auto;
+
+    &:hover {
+        opacity: 0.85;
+    }
+}
+
+.setting-switch {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    border: 0;
+    border-radius: 999px;
+    background: #d9d9d9;
+    cursor: pointer;
+    padding: 0;
+    transition: background-color 0.2s ease;
+    flex: 0 0 auto;
+    box-shadow: 1px 1px 1px var(--color-box-shadow);
+
+    &.active {
+        background: $primary;
+    }
+}
+
+.setting-switch-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease;
+}
+
+.setting-switch.active .setting-switch-thumb {
+    transform: translateX(18px);
+}
+
+.refresh-hint {
+    color: #ff4d4f;
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease-in-out;
+    z-index: 999;
+}
+
+.modal-content {
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    animation: slideIn 0.3s ease-in-out;
+    position: relative;
+    max-height: 50vh;
+    overflow: hidden;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+
+    &:has(>.api-settings-container) {
+        max-height: 70vh;
+    }
+
+    h3 {
+        flex: 0 0 auto;
+        font-size: 20px;
+        margin-bottom: 20px;
+        color: #333;
+    }
+
+    .font-search {
+        padding: 12px;
+        margin: 6px 0;
+        outline: 0;
+        border: 0;
+        border-radius: 8px;
+        font-size: 1em;
+    }
+
+    ul {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: 46vh;
+        overflow-y: auto;
+        list-style: none;
+        padding: 0 4px 0 0;
+        margin: 0;
+        overscroll-behavior: contain;
+    }
+
+    li {
+        padding: 12px;
+        margin: 6px 0;
+        background-color: var(--background-color);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+
+        &:hover {
+            background-color: var(--secondary-color);
+        }
+    }
+
+    button:not(.setting-switch) {
+        flex: 0 0 auto;
+        margin-top: 20px;
+        padding: 10px 20px;
+        background-color: $secondary;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s;
+
+        &:hover {
+            background-color: $primary;
+        }
+
+        &.ghost-button {
+            margin: 0;
+            padding: 0;
+            border: none;
+            min-width: auto;
+            background-color: transparent;
+
+            &:hover {
+                opacity: 0.6;
+            }
+        }
+
+        &.close-button {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            font-size: 18px;
+            color: var(--text-color);
+        }
+    }
+
+    > button {
+        align-self: center;
+        min-width: 96px;
+    }
+
+    .switch-panel {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+
+        >button {
+            margin-top: 0;
+            color: var(--text-color);
+            background-color: var(--secondary-color);
+            transition-property: color, background-color;
+
+            &:hover {
+                color: #fff;
+            }
+
+            &.active {
+                color: #fff;
+                background-color: $primary;
+            }
+        }
+    }
+}
+
+.help-link {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    color: $primary;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 18px;
+
+    &.normal {
+        position: static;
+        display: inline;
+    }
+
+    &:hover {
+        opacity: 0.85;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-20px);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+.version-info {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 14px;
+    color: $text-muted;
+}
+
+.reset-settings-container {
+    display: flex;
+    justify-content: center;
+    margin: 30px 0 20px 0;
+}
+
+.reset-settings-button {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    &:hover {
+        background-color: #e53935;
+    }
+}
+
+.scale-slider-container {
+    margin-top: 15px;
+    text-align: left;
+    padding: 15px;
+    background-color: var(--background-color);
+    border-radius: 8px;
+}
+
+.scale-slider-label {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.scale-slider-hint {
+    font-size: 12px;
+    color: $text-muted;
+}
+
+.scale-slider-wrapper {
+    position: relative;
+    padding-bottom: 20px;
+}
+
+.scale-slider {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #ddd;
+    outline: none;
+    border-radius: 3px;
+
+    &::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: $primary;
+        cursor: pointer;
+    }
+
+    &::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: $primary;
+        cursor: pointer;
+        border: none;
+    }
+}
+
+.scale-marks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+    font-size: 12px;
+    color: $text-muted;
+}
+
+.api-settings-container,
+.proxy-settings-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    .api-setting-item {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        margin-bottom: 10px;
+        width: 100%;
+
+        &.row {
+            margin-top: 8px;
+            flex-direction: row;
+            justify-content: space-between;
+        }
+
+        label {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 5px;
+
+            .btns {
+                display: inline-flex;
+                align-items: center;
+                margin-left: 4px;
+                gap: 6px;
+
+                .copy-button {
+                    display: inline;
+                    font-size: 16px;
+
+                    &:hover {
+                        opacity: 0.8;
+                    }
+                }
+            }
+        }
+
+        .api-input {
+            width: 100%;
+            height: 35px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 5px;
+            padding-left: 10px;
+            box-sizing: border-box;
+
+            &:read-only {
+                color: $text-muted;
+                border-color: $text-muted;
+                outline-color: $primary-light;
+            }
+        }
+    }
+
+    .api-hint {
+        font-size: 12px;
+        color: #999;
+        text-align: center;
+    }
+
+    .proxy-actions {
+        display: flex;
+        gap: 12px;
+        width: 100%;
+
+        button {
+            flex: 1;
+            min-width: 0;
+            padding: 8px 0;
+            border-radius: 6px;
+        }
+    }
+
+    .proxy-test-result {
+        font-size: 13px;
+        line-height: 18px;
+        margin-top: 5px;
+
+        &.success {
+            color: #4caf50;
+        }
+
+        &.error {
+            color: #e53935;
+        }
+    }
+}
+</style>
