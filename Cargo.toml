@@ -17,7 +17,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # 核心
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri = { version = "2", features = ["custom-protocol", "tray-icon", "image-png"] }
 tauri-plugin-opener = "2"         # 外链（mailto/tel/http 外部打开）＋文件打开
 tauri-plugin-dialog = "2"         # 原生对话框（日志导出保存、免责声明提示）
 tauri-plugin-global-shortcut = "2"

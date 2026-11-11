@@ -7,7 +7,7 @@
     "beforeDevCommand": "pnpm serve",
     "devUrl": "http://localhost:8080",
     "beforeBuildCommand": "pnpm build",
-    "frontendDist": "../dist"
+    "frontendDist": "frontend/dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -79,7 +79,7 @@
     ],
     "externalBin": [],
     "resources": {
-      "../public/assets": "assets",
+      "frontend/public": "assets",
       "sidecar": "sidecar"
     },
     "linux": {
