@@ -28,12 +28,8 @@ pub fn sidecar_dir(app: &AppHandle) -> PathBuf {
     }
 }
 
-/// 确保 kugoumusicapi sidecar 在跑（只启一次；不存在二进制则静默跳过，便于先手工联调）
-pub fn ensure_running(app: &AppHandle) {
-    if SIDECAR.lock().unwrap().is_some() {
-        return;
-    }
-    let dir = sidecar_dir(app);
+/// 从给定目录拉起 sidecar 子进程（共用实现；成功持有句柄返回 true）
+fn spawn_from(dir: &std::path::Path) -> bool {
     let node = dir.join("node.exe");
     let entry = dir.join("kugoumusicapi").join("app.js");
     if !node.exists() || !entry.exists() {
@@ -41,7 +37,7 @@ pub fn ensure_running(app: &AppHandle) {
             "[sidecar] 未找到运行时(node.exe)或入口(app.js)于 {}，跳过自动启动",
             dir.display()
         );
-        return;
+        return false;
     }
 
     let mut cmd = Command::new(&node);
@@ -54,7 +50,6 @@ pub fn ensure_running(app: &AppHandle) {
     // 关键：node 入口用「cwd 相对路径 app.js」，避免 Windows 下绝对路径传参被 node 模块解析
         // 误析成盘符 `D:`（报 `EISDIR: lstat 'D:'` 后直接退出）。
         // current_dir 已设为 kugoumusicapi 目录，相对入口天然正确。
-        let _abs_entry = &entry; // 仅用于上方存在性检查（已用 entry.exists()）
         cmd.arg("app.js")
         .arg(format!("--port={SIDECAR_PORT}"))
         .arg(format!("--host={SIDECAR_HOST}"))
@@ -120,12 +115,53 @@ pub fn ensure_running(app: &AppHandle) {
                 "[sidecar] 已启动 kugoumusicapi @ {}:{}",
                 SIDECAR_HOST, SIDECAR_PORT
             );
+            true
         }
         Err(e) => {
             eprintln!("[sidecar] 启动失败: {e}");
-            let _ = &e;
+            false
         }
     }
+}
+
+/// 设备目录候选（不依赖 AppHandle，供早启使用）：
+///   1. release：当前 exe 同级 sidecar/（免安装版布局：exe 与 sidecar 同目录）
+///   2. 任意模式：$CARGO_MANIFEST_DIR/sidecar（源码/开发布局）
+/// 若以上均不命中（如安装包资源目录不落在这两处），早启静默失败，
+/// 由 setup() 的 ensure_running 按 resource_dir 兜底，行为等价于改造前。
+fn sidecar_candidate_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    #[cfg(not(debug_assertions))]
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            dirs.push(parent.join("sidecar"));
+        }
+    }
+    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sidecar"));
+    dirs
+}
+
+/// 早启：在 run() 最开头（窗口/WebView2 初始化之前）拉起 sidecar，
+/// node 启动与 tauri 初始化并行，后端尽早就绪。已拉起则直接返回；
+/// 失败/布局不支持时静默，交给 ensure_running 兜底。
+pub fn spawn_early() {
+    if SIDECAR.lock().unwrap().is_some() {
+        return;
+    }
+    for dir in sidecar_candidate_dirs() {
+        if spawn_from(&dir) {
+            return;
+        }
+    }
+}
+
+/// 确保 kugoumusicapi sidecar 在跑（只启一次；不存在二进制则静默跳过，便于先手工联调）
+pub fn ensure_running(app: &AppHandle) {
+    if SIDECAR.lock().unwrap().is_some() {
+        return;
+    }
+    let dir = sidecar_dir(app);
+    let _ = spawn_from(&dir);
 }
 
 /// 退出时回收

@@ -12,6 +12,8 @@ mod windows;
 pub const FS_RUST_BUS: &str = "bridge:front_to_rust"; // 前端 → 壳事件总线
 
 pub fn run() {
+    // exe 启动立即并行拉起 sidecar（node 与 tauri/WebView2 初始化同步进行，互不等待）
+    sidecar::spawn_early();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
