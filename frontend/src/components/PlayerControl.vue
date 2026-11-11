@@ -1512,6 +1512,7 @@ const setupMediaShortcuts = () => {
         changeVolume();
     });
     window.electron.ipcRenderer.on('toggle-play-pause', togglePlayPause);
+    window.electron.ipcRenderer.on('pause-playback', () => pausePlayback('tray')); // 托盘固定「暂停」
     window.electron.ipcRenderer.on('toggle-mute', toggleMute);
     window.electron.ipcRenderer.on('toggle-like', () => playlistSelect.value.toLike());
     window.electron.ipcRenderer.on('toggle-mode', togglePlaybackMode);

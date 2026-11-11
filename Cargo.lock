@@ -2228,7 +2228,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "moekoemusic"
+name = "moekoekellite"
 version = "1.7.2"
 dependencies = [
  "log",
@@ -2243,6 +2243,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-shell",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

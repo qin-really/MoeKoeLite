@@ -65,8 +65,17 @@ pub fn handle_lyrics_action(app: &AppHandle, action: &str) {
             let _ = emit_to_main(app, "desktop-lyrics-state", serde_json::json!({ "on": false }));
         }
         "display-lyrics" => {
+            // 不强制居中：位置由前端按持久化恢复决定（有保存位置 → 保持原位置；
+            // 无保存位置 → 前端居中一次），保证"关闭再开启"回到持久化状态
             if let Ok(w) = lyrics_window(app) {
-                let _ = w.center();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+            let _ = emit_to_main(app, "desktop-lyrics-state", serde_json::json!({ "on": true }));
+        }
+        "display-lyrics-nocenter" => {
+            // 恢复持久位置时显示：不居中（位置由前端按歌词窗本地缓存恢复），仅 show+focus
+            if let Ok(w) = lyrics_window(app) {
                 let _ = w.show();
                 let _ = w.set_focus();
             }
@@ -117,4 +126,27 @@ pub fn lyrics_pointer_bounds(app: &AppHandle) -> tauri::Result<(PhysicalPosition
     let pos = w.outer_position()?;
     let size = w.outer_size()?;
     Ok((pos, (size.width, size.height)))
+}
+
+/// 全局鼠标坐标（屏幕物理坐标），歌词窗穿透时用于"悬浮在歌词文字上才指向"的命中判定
+pub fn global_cursor_pos() -> Option<(i32, i32)> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::Foundation::POINT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+        let mut pt = POINT { x: 0, y: 0 };
+        // SAFETY: 传入了有效 POINT 栈指针，GetCursorPos 失败返回 0
+        let ok = unsafe { GetCursorPos(&mut pt) };
+        if ok != 0 {
+            return Some((pt.x, pt.y));
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return None;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        None
+    }
 }

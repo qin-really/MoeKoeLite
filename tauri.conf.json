@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MoeKoe Music",
+  "productName": "MoeKoe Lite",
   "version": "1.7.2",
-  "identifier": "cn.MoeKoe.Music",
+  "identifier": "cn.MoeKoeLite.Music",
   "build": {
     "beforeDevCommand": "pnpm serve",
     "devUrl": "http://localhost:8080",
@@ -33,11 +33,12 @@
       {
         "label": "lyrics",
         "title": "歌词",
+        "url": "index.html#/lyrics",
         "width": 900,
         "height": 128,
         "minWidth": 800,
         "minHeight": 96,
-        "resizable": true,
+        "resizable": false,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,

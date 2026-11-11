@@ -180,9 +180,11 @@ pub struct PointerState {
 #[tauri::command]
 pub fn lyrics_pointer_state(app: AppHandle) -> Option<PointerState> {
     let (pos, (w, h)) = windows::lyrics_pointer_bounds(&app).ok()?;
+    // cursor = 全局鼠标坐标（GetCursorPos），供歌词窗按屏幕坐标做"悬浮歌词命中"检测
+    let (cx, cy) = windows::global_cursor_pos().unwrap_or((0, 0));
     let cursor = serde_json::json!({
-        "x": pos.x,
-        "y": pos.y,
+        "x": cx,
+        "y": cy,
     });
     let bounds = serde_json::json!({
         "x": pos.x,
@@ -266,6 +268,11 @@ pub fn dispatch_bus(app: &AppHandle, payload: Value) {
             let ignore = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
             let forward = args.get(1).and_then(|v| v.as_bool()).unwrap_or(false);
             let _ = windows::lyrics_set_ignore_cursor(app, ignore, forward);
+        }
+        "lyrics-lock-state" => {
+            // 歌词窗前端锁定/解锁 → 同步托盘菜单文本
+            let locked = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
+            crate::tray::set_lyrics_lock(app, locked);
         }
         "window-drag" => {
             if let Some(o) = args.first().and_then(|v| v.as_object()) {

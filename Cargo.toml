@@ -1,7 +1,7 @@
 [package]
-name = "moekoemusic"
+name = "moekoekellite"
 version = "1.7.2"
-description = "MoeKoe Music — 酷狗第三方桌面播放器（Tauri 版）"
+description = "MoeKoeLite — 酷狗第三方桌面播放器（Tauri 极速版）"
 authors = ["MoeJue"]
 license = "GPL-2.0-only"
 edition = "2021"
@@ -9,7 +9,7 @@ rust-version = "1.77.2"
 
 # 构建产物放在 target（默认）。tauri 编译要求 build.rs 由 tauri-build 处理。
 [lib]
-name = "moekoemusic_lib"
+name = "moekoekellite_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -29,4 +29,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # 日志（替代 electron-log 可看的位置，简单文件日志可选，本轮用 println/存 Tauri 日志）
 log = "0.4"
+# Windows：全局鼠标坐标（GetCursorPos，用于歌词窗穿透时悬浮歌词命中断言）
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 # Windows 专属：托盘/窗口定位默认不需要额外 crate；深链/全局快捷键走插件

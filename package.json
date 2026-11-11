@@ -1,0 +1,13 @@
+{
+  "name": "moekoekellite",
+  "version": "1.7.2",
+  "private": true,
+  "description": "MoeKoe Music — 酷狗第三方桌面播放器（Tauri 壳）",
+  "scripts": {
+    "build": "cd frontend && pnpm build",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4"
+  }
+}

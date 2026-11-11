@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
+#[cfg_attr(debug_assertions, allow(unused_imports))]
 use tauri::{AppHandle, Manager};
 
 /// sidecar 子进程句柄（退出时回收）

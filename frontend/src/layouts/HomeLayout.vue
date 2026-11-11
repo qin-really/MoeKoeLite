@@ -173,30 +173,30 @@ onUnmounted(() => {
 
 <style>
 :root {
-    /* 粉红色主色调 - 用于主要按钮、强调元素 */
-    --primary-color: #FF69B4;
-    /* 粉红色主色调的RGB值 - 用于需要RGB格式的样式 */
-    --primary-color-rgb: '255, 105, 180';
-    /* 浅粉红色辅助色 - 用于次要按钮、提示信息 */
-    --secondary-color: #FFB6C1;
+    /* 天空蓝主色调 - 用于主要按钮、强调元素 */
+    --primary-color: #4A90E2;
+    /* 天空蓝主色调的RGB值 - 用于需要RGB格式的样式 */
+    --primary-color-rgb: '74, 144, 226';
+    /* 浅天蓝色辅助色 - 用于次要按钮、提示信息 */
+    --secondary-color: #AEDFF7;
     /* 文本颜色 - 用于正文内容 */
     --text-color: #333;
-    /* 浅粉色背景 - 用于页面主背景 */
-    --background-color: #FFF0F5;
+    /* 浅天蓝背景 - 用于页面主背景 */
+    --background-color: #E8F4FA;
     /* 次要背景色 - 用于卡片、侧边栏背景 */
-    --background-color-secondary: #FFE6F0;
+    --background-color-secondary: #D9EEFA;
     /* 高亮色 - 用于交互元素如按钮、链接 */
-    --color-primary: #ea33e4;
+    --color-primary: #2A6DAF;
     /* 高亮色的浅色版本 - 用于选中状态背景 */
-    --color-primary-light: rgba(255, 105, 180, 0.1);
+    --color-primary-light: rgba(74, 144, 226, 0.1);
     /* 边框颜色 - 用于分隔线、边框 */
-    --border-color: #FFD9E6;
+    --border-color: #C5E0F5;
     /* 悬停颜色 - 用于元素悬停状态 */
-    --hover-color: #FFE9F2;
+    --hover-color: #D1E9F9;
     /* 半透明背景 - 用于覆盖层、提示框 */
-    --color-secondary-bg-for-transparent: rgba(209, 209, 214, 0.28);
+    --color-secondary-bg-for-transparent: rgba(174, 223, 247, 0.28);
     /* 阴影颜色 - 用于卡片、弹窗阴影 */
-    --color-box-shadow: rgba(255, 105, 180, 0.2);
+    --color-box-shadow: rgba(74, 144, 226, 0.2);
 }
 
 * {

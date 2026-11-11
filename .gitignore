@@ -25,3 +25,7 @@ Desktop.ini
 *.tmp
 .idea/
 *.swp
+
+# ── 参照源码克隆 / 归档（随项目参考，不入仓库）────────
+/MoeKoeMusic-main/
+*.zip

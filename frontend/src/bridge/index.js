@@ -57,8 +57,11 @@ function installElectronLike() {
       return Promise.resolve(null);
     },
     on: (channel, listener) => {
-      const wrapped = (payload) => listener(payload);
-      const unlisten = listen(channel, (e) => wrapped(e.payload));
+      // 对齐 Electron ipcRenderer 语义：回调收到 (event, ...args)；
+      // 把 Tauri 事件的 e（含 .payload）当作 event，payload 作为数据参数传第 2 位，
+      // 否则所有 `(_event, data)` 双参消费者（如 Lyrics.vue 的 lyrics-data）data 恒为 undefined
+      const wrapped = (e) => listener(e, e.payload);
+      const unlisten = listen(channel, wrapped);
       const unsubscribe = () => void unlisten.then((u) => u());
       listener[Symbol.for('moekoe.unlisten')] = unsubscribe;
       // 返回可离线的 removeListener 函数（对齐 Electron on 语义）
@@ -66,12 +69,12 @@ function installElectronLike() {
     },
     once: (channel, listener) => {
       let removed = false;
-      const wrapped = (payload) => {
+      const wrapped = (e) => {
         if (removed) return;
         removed = true;
-        listener(payload);
+        listener(e, e.payload);
       };
-      const unlisten = listen(channel, (e) => wrapped(e.payload));
+      const unlisten = listen(channel, wrapped);
       const unsubscribe = () => {
         removed = true;
         void unlisten.then((u) => u());
