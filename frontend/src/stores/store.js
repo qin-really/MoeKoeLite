@@ -1,13 +1,9 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 import { getApiBaseUrl } from '../utils/apiBaseUrl';
+import { getOrCreateLocalDevice } from '../utils/device';
 
 const hasBuiltinApi = () => 'kugouapi' in window;
-
-// sidecar（kugoumusicapi）冷启动未就绪时的设备注册重试参数：
-// 退避 1500ms、最多 20 次 ≈ 30s，覆盖冷启动（最慢约 25s）与酷狗官方接口偶发返回空数据
-const DEVICE_INIT_BACKOFF_MS = 1500;
-const DEVICE_INIT_MAX_ATTEMPTS = 20;
 
 // 登录态持久化键（localStorage，跨重启可靠保留 —— 已实测 WebView2 持久）
 const MOEDATA_KEY = 'MoeData';
@@ -29,6 +25,29 @@ function restoreUserInfo() {
     }
 }
 
+// 后台补读：若首读未命中（WebView2 storage 冷启动晚就绪），定时重读。
+// 命中后写入响应式 store 并派发全局 `moekoe:auth-restored` 事件（供登录页
+// 自动折返）。由 action `ensureRestoredPoll` 触发，注意必须以 store 实例
+// （this）操作，才能触发响应式更新与 Login 折返。
+function scheduleRestorePoll(store, pollKey) {
+    if (store.UserInfo) return;
+    if (store[pollKey]) return; // 防重复启动
+    store[pollKey] = true;
+    let tries = 0;
+    const iv = setInterval(() => {
+        tries += 1;
+        const u = restoreUserInfo();
+        if (u) {
+            store.UserInfo = u;
+            clearInterval(iv);
+            window?.dispatchEvent(new CustomEvent('moekoe:auth-restored', { detail: u }));
+        } else if (tries >= 30) {
+            // 约 9s 仍未读到 → 判定无持久登录态，结束补读
+            clearInterval(iv);
+        }
+    }, 300);
+}
+
 const registerDeviceApi = hasBuiltinApi()?
 { get: async(path, payload = {}) => {
     const res = await window.kugouapi?.request(path, payload);
@@ -47,8 +66,12 @@ export const MoeAuthStore = defineStore('MoeData', {
             UserInfo: restored, // 用户信息（启动即从 localStorage 恢复登录态）
             Config: null, // 配置信息
             Device: null, // 设备信息
-            // 登录态是否已从持久化恢复完成（供路由守卫等待，避免冷启动竞态误跳登录页）
+            // 是否仍需补读登录态（首读未命中时 true，供登录页/App 启动补读）
+            hydrating: !restored,
+            // 首读是否已成功（供其它逻辑快速判断）
             restored: !!restored,
+            // 补读是否已启动（防重复）
+            _pollStarted: false,
         };
     },
     actions: {
@@ -77,43 +100,31 @@ export const MoeAuthStore = defineStore('MoeData', {
                 console.warn('[MoeAuth] 清除登录态失败', e);
             }
         },
-        // 冷启动兜底：若初始恢复未命中（WebView2 storage 尚未就绪），再次尝试读取。
-        // 幂等：已恢复则无操作。
-        ensureRestored() {
-            if (this.UserInfo) return this.UserInfo;
-            if (this.restored) return null;
-            const restored = restoreUserInfo();
-            if (restored) {
-                this.UserInfo = restored;
-                this.restored = true;
-                return restored;
-            }
-            return null;
+        // 冷启动补读（幂等）：若首读未命中（WebView2 storage 晚就绪），启动后台
+        // 轮询补读；命中后写入响应式 store 并派发 moekoe:auth-restored 事件（由
+        // 登录页自动折返）。调用方：登录页 onMounted / App 启动。
+        ensureRestoredPoll() {
+            scheduleRestorePoll(this, '_pollStarted');
         },
-        async initDevice(attempt = 1) {
+        async initDevice() {
             if (this.Device) return this.Device;
+            // 1) 本地生成/读取稳定设备（同步、跨启动持久复用同一设备）。
+            //    酷狗将请求中携带的设备标识（uuid/mid/mac…）识别为该设备，
+            //    不依赖 register_dev（该接口存在风控/偶发返回空，缺失 dfid 时
+            //    内置 API 仍可正常工作——与原版 Electron 行为一致）。
+            const local = getOrCreateLocalDevice();
+            this.Device = { ...local, serverDev: local.dev };
+
+            // 2) 尝试用 register_dev 补充 dfid（失败静默，不影响设备就绪）
             try {
                 const response = await registerDeviceApi.get('/register/dev');
-                const raw = hasBuiltinApi()? response?.data: response?.data?.data;
-                // 仅接受含非空 dfid 的设备对象才算注册成功：
-                // `data: []`（酷狗官方接口受限/初始化竞态）不得误判成功；
-                // 兼容 response:{data:{dfid}} 与 axios 两级结构
-                const device = raw?.dfid ? raw : (raw?.data?.dfid ? raw.data : null);
-                if (device) {
-                    this.Device = device;
-                    return device;
-                }
-            } catch (error) {
-                console.warn(`[MoeAuth] register /register/dev 第 ${attempt} 次失败：`, error);
+                const raw = hasBuiltinApi() ? response?.data : response?.data?.data;
+                const dfid = raw?.dfid || raw?.data?.dfid;
+                if (dfid) this.Device.dfid = dfid;
+            } catch (e) {
+                console.warn('[MoeAuth] register/dev 补充 dfid 失败（忽略，本地设备已就绪）', e);
             }
-            // 后端未就绪（sidecar 冷启动）或尚未拿到 dfid —— 退避后重试，覆盖启动竞态。
-            // 注意：重试不附加 timestamp 绕过服务端 apicache(2min)，避免高频真打酷狗触发限流。
-            if (attempt < DEVICE_INIT_MAX_ATTEMPTS) {
-                setTimeout(() => this.initDevice(attempt + 1), DEVICE_INIT_BACKOFF_MS);
-                return null; // 本次调用先行返回，等待下一轮重试
-            }
-            console.error(`[MoeAuth] 重试 ${DEVICE_INIT_MAX_ATTEMPTS} 次仍未注册到设备（dfid），放弃设备注册`);
-            return null;
+            return this.Device;
         }
     },
     getters: {

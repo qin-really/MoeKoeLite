@@ -117,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue';
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { get } from '../utils/request';
 import { MoeAuthStore } from '../stores/store';
 import { useRouter, useRoute } from 'vue-router';
@@ -130,6 +130,26 @@ const options = [t('shou-ji-hao-deng-lu'), t('you-xiang-deng-lu'), t('sao-ma-den
 const MoeAuth = MoeAuthStore();
 const router = useRouter();
 const route = useRoute();
+
+// 冷启动兜底：store 后台补读持久化登录态，补读成功后自动折返回原目标，
+// 避免「storage 晚就绪被误判未登录而误入登录页」.+ 正常已登录时也兜底折返。
+const backToIntended = () => {
+  if (MoeAuth.isAuthenticated) {
+    router.replace(route.query.redirect || '/library');
+    return true;
+  }
+  return false;
+};
+onMounted(() => {
+  // 启动后台补读（若首读失败，等待 storage 就绪后自动恢复并折返）
+  MoeAuth.ensureRestoredPoll();
+  if (!backToIntended()) {
+    window.addEventListener('moekoe:auth-restored', backToIntended);
+  }
+});
+onUnmounted(() => {
+  window.removeEventListener('moekoe:auth-restored', backToIntended);
+});
 
 const emailForm = reactive({
   email: '',

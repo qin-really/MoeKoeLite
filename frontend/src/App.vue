@@ -24,6 +24,8 @@ onMounted(async () => {
     showTitleBar.value = settings.nativeTitleBar !== 'on'; // 如果值为 'on'，则不显示 TitleBar
 
     const MoeAuth = MoeAuthStore();
+    // 后台补读登录态（支撑 storage 晚就绪场景，幂等）
+    MoeAuth.ensureRestoredPoll();
     await MoeAuth.initDevice();
 });
 </script>
