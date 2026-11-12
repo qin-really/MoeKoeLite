@@ -44,12 +44,18 @@ const router = createRouter({
 });
 
 // 全局导航守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
     console.log('完整的路由地址:', to.fullPath);
 
     const MoeAuth = MoeAuthStore();
 
     if (to.matched.some(record => record.meta.requiresAuth)) {
+        // 冷启动兜底：等待持久化登录态恢复（WebView2 storage 偶尔晚就绪，
+        // 避免因此误跳登录页而要求重新扫码）
+        if (!MoeAuth.isAuthenticated && !MoeAuth.restored) {
+            await new Promise(r => setTimeout(r, 600));
+            MoeAuth.ensureRestored();
+        }
         if (!MoeAuth.isAuthenticated) {
             return next({
                 name: 'Login',

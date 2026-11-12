@@ -51,7 +51,7 @@ const route = useRoute();
 const playerControl = ref(null);
 const mainScrollRef = ref(null);
 const isOnline = ref(navigator.onLine);
-const navigationMode = ref('top');
+const navigationMode = ref('side');
 const sidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === '1');
 const playerBarLayout = ref('full');
 const isPageRouteEntering = ref(false);
@@ -75,7 +75,8 @@ const handleNetworkChange = (online) => {
 const handleOnline = () => handleNetworkChange(true);
 const handleOffline = () => handleNetworkChange(false);
 const loadNavigationMode = (settings = JSON.parse(localStorage.getItem('settings')) || {}) => {
-    navigationMode.value = settings.navigationMode === 'side' ? 'side' : 'top';
+    // 默认导航方式：左侧（未显式配置或缺省时归 'side'；仅显式 'top' 才用顶部）
+    navigationMode.value = settings.navigationMode === 'top' ? 'top' : 'side';
     playerBarLayout.value = settings.playerBarLayout === 'content' ? 'content' : 'full';
     applyPlayerBarLayout();
 };

@@ -3,7 +3,7 @@
 	"themeColor": "blue",
 	"theme": "light",
 	"searchMode": "quick",
-	"navigationMode": "top",
+	"navigationMode": "side",
 	"playerBarLayout": "full",
 	"nativeTitleBar": "off",
 	"font": "",
