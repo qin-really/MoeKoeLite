@@ -165,6 +165,22 @@ pub fn ensure_running(app: &AppHandle) {
     let _ = spawn_from(&dir);
 }
 
+/// 后台探测 6520 端口就绪（最多约 40s），就绪后触发回调。
+/// 用于向前端广播「后端已就绪」，让页面在启动早期用缓存渲染、就绪后刷新。
+pub fn once_ready(cb: impl FnOnce() + Send + 'static) {
+    std::thread::spawn(move || {
+        let host: &str = SIDECAR_HOST;
+        let port: u16 = SIDECAR_PORT.parse().unwrap_or(6520);
+        for _ in 0..200 {
+            if std::net::TcpStream::connect((host, port)).is_ok() {
+                cb();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    });
+}
+
 /// 退出时回收
 pub fn shutdown() {
     if let Some(mut child) = SIDECAR.lock().unwrap().take() {

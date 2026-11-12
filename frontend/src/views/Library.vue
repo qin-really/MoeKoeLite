@@ -168,6 +168,7 @@
 
 <script setup>
 import { computed, ref, onMounted } from 'vue';
+import { listen } from '@tauri-apps/api/event';
 import { get } from '../utils/request';
 import { getProfileBgColor } from '../utils/utils';
 import { MoeAuthStore } from '../stores/store';
@@ -271,6 +272,14 @@ onMounted(() => {
         // 获取用户vip信息
         getVipInfo();
     }
+    // 后端就绪后自动刷新一次：若首屏因后端未就绪走了缓存/失败，就绪后立即刷新为真实数据
+    let refreshed = false;
+    listen('moekoe:sidecar-ready', () => {
+        if (MoeAuth.isAuthenticated && !refreshed) {
+            refreshed = true;
+            getUserDetails();
+        }
+    }).catch(() => { /* 非 Tauri 环境忽略 */ });
 });
 const getUserDetails = () => {
     // 获取用户详细信息

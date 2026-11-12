@@ -3,6 +3,7 @@ import axios from 'axios';
 import { MoeAuthStore } from '../stores/store';
 import { getApiBaseUrl } from './apiBaseUrl';
 import { handleRiskResponse } from './riskVerify';
+import { isSidecarReady, waitSidecarReady } from './sidecarReady';
 
 const injectAuthHeader = (config) => {
     const MoeAuth = MoeAuthStore();
@@ -12,18 +13,24 @@ const injectAuthHeader = (config) => {
     const dfid = MoeAuth.Device?.dfid;
     const mid = MoeAuth.Device?.mid;
     const guid = MoeAuth.Device?.guid;
-    const serverDev = MoeAuth.Device?.serverDev;
+    const serverDev = MoeAuth.Device?.serverDev || MoeAuth.Device?.dev;
     const mac = MoeAuth.Device?.mac;
+    const webgl = MoeAuth.Device?.webgl;
 
     const authParts = [];
     if (token) authParts.push(`token=${(token)}`);
     if (userid) authParts.push(`userid=${(userid)}`);
     if (dfid) authParts.push(`dfid=${(dfid)}`);
     if (t1) authParts.push(`t1=${(t1)}`);
-    if (mid) authParts.push(`KUGOU_API_MID=${(mid)}`);
     if (guid) authParts.push(`KUGOU_API_GUID=${(guid)}`);
+    if (mid) authParts.push(`KUGOU_API_MID=${(mid)}`);
     if (serverDev) authParts.push(`KUGOU_API_DEV=${(serverDev)}`);
     if (mac) authParts.push(`KUGOU_API_MAC=${(mac)}`);
+    if (webgl) authParts.push(`KUGOU_API_WEBGL=${(webgl)}`);
+    // 对齐原版（createRequest 注入 KUGOU_API_PLATFORM: process.env.platform）
+    // 使用 lite 数据源，避免酷狗把缺失平台误判为 undefined 返回受限数据
+    const platform = 'lite';
+    if (platform) authParts.push(`KUGOU_API_PLATFORM=${platform}`);
 
     if (authParts.length > 0) {
         config.headers = {
@@ -100,15 +107,58 @@ httpClient.interceptors.response.use(
     }
 );
 
+// ---- 简易请求级缓存（用于后端未就绪时先用上次成功数据渲染，就绪后刷新覆盖）----
+const CACHE_NS = 'moekoe:api-cache';
+function apiCacheKey(pathWithQuery) {
+    return `u:${btoa(unescape(encodeURIComponent(pathWithQuery))).replace(/=/g, '')}`;
+}
+function readApiCache(path) {
+    try {
+        const raw = localStorage.getItem(`${CACHE_NS}:${apiCacheKey(path)}`);
+        if (!raw) return null;
+        const d = JSON.parse(raw);
+        if (!d || !d.body || Date.now() - d.at > 7 * 24 * 3600 * 1000) return null;
+        if (!hasRealData(d.body)) {
+            localStorage.removeItem(`${CACHE_NS}:${apiCacheKey(path)}`); // 清理空数据坏缓存
+            return null;
+        }
+        return d.body;
+    } catch { return null; }
+}
+// 是否有“真实”业务数据（排除酷狗偶发返回的空数组/空对象，避免空响应污染缓存）
+function hasRealData(body) {
+    const d = body?.data;
+    if (d == null) return false;
+    if (Array.isArray(d)) return d.length > 0;
+    if (typeof d === 'object') return Object.keys(d).length > 0;
+    return d !== '' && d !== '-' && d !== undefined;
+}
+function writeApiCache(path, body) {
+    try {
+        if (!hasRealData(body)) return; // 空响应不入缓存
+        const cur = readApiCache(path);
+        if (cur && hasRealData(cur)) return; // 保留已有非空缓存（酷狗偶发空不覆盖好数据）
+        localStorage.setItem(`${CACHE_NS}:${apiCacheKey(path)}`, JSON.stringify({ at: Date.now(), body }));
+    } catch { /* 容量满等静默 */ }
+}
+
 const requestBuiltinApi = async (path, payload) => {
+    // 启动早期后端(sidecar)可能尚未就绪：先等待就绪再发，避免首屏请求失败即空
+    const wasReady = isSidecarReady();
+    if (!wasReady) await waitSidecarReady();
     const result = await kugouapi.request(path, injectAuthHeader(payload));
     const resp = result.body || { data: undefined, error_code: 0, error_msg: 'body is undefined', status: 0 };
+    if (resp && resp.status === 1 && resp.data != null && resp.data !== undefined && resp.data !== '') {
+        writeApiCache(path, resp); // 成功响应入缓存（供下次启动后端未就绪时回落）
+    }
     const riskResult = await handleRiskResponse(result,
         (retryConfig) => requestBuiltinApi({ ...retryConfig }),
         (path, params) => requestBuiltinApi(path, { params, __skipRisk: true })
     );
-    if(riskResult.handled) return riskResult.data;
-    else return resp;
+    if (riskResult.handled) return riskResult.data;
+    return resp;
+    // 注：若后端长时间未就绪导致 kugouapi.request 抛错（网络拒绝），由调用侧
+    // onSuccess/缓存兜底；这里不吞错以保留原有语义。
 }
 
 const hasBuiltinApi = () => 'kugouapi' in window;
@@ -122,6 +172,14 @@ export const get = async (url, params = {}, config = {}, onSuccess = null, onErr
         if (onSuccess) onSuccess(response);
         return response;
     } catch (error) {
+        // 后端未就绪/网络错误：回落到上次成功缓存渲染（若有），等 sidecar-ready 后再刷新
+        if (hasBuiltinApi()) {
+            const cached = readApiCache(url);
+            if (cached) {
+                if (onSuccess) onSuccess(cached);
+                return cached;
+            }
+        }
         if (onError) onError(error);
         throw error;
     }

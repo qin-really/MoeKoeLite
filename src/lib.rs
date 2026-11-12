@@ -60,6 +60,16 @@ pub fn run() {
             windows::setup_windows(&handle)?;
             tray::setup(&handle)?;
             sidecar::ensure_running(&handle);
+            // 3) sidecar 拉取完成后向前端广播「后端就绪」（供页面延迟加载/缓存刷新）
+            {
+                use tauri::{Emitter as _, Manager as _};
+                let sh = handle.clone();
+                sidecar::once_ready(move || {
+                    for (_label, w) in sh.webview_windows() {
+                        let _ = w.emit("moekoe:sidecar-ready", ());
+                    }
+                });
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

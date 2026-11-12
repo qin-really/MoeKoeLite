@@ -1,4 +1,6 @@
 import './bridge'; // 必须在最前：模块顶层即注入 Tauri 桌面桥（供 store 等顶层 hasBuiltinApi 判断）
+import { initSidecarReady } from './utils/sidecarReady';
+initSidecarReady(); // 预监听后端就绪事件（勿错过：就绪可能早于页面脚本）
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import piniaPersistedstate from 'pinia-plugin-persistedstate';
